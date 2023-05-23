@@ -1,11 +1,10 @@
 #include <Arduino.h>
-#include <ArduinoJson.h>
 #include <SoftwareSerial.h>
 #include <ESP8266WiFi.h>
 #include <Firebase_ESP_Client.h>
 
-SoftwareSerial arduino(2, 3);
-#define wifiPin 5
+SoftwareSerial arduino(5, 4); // d1,d2
+#define wifiPin 14            // d5
 unsigned int prevTime;
 unsigned int intervalMillis;
 
@@ -30,15 +29,17 @@ FirebaseAuth auth;
 FirebaseConfig config;
 
 // Define variables to store sensor values and appliance states
-uint8_t gasSensorValue;
-uint8_t waterLevelSensorValue;
-bool waterPumpState;
-bool lightState;
-bool fanState;
-bool lockState;
-bool updated; // keeps track of things that changed.
-uint8_t tempInside, tempOutside, humInside, humOutside;
+String gasSensorValue;
+String waterLevelSensorValue;
+String waterPumpState;
+String lightState;
+String fanState;
+String lockState;
+String tempInside, tempOutside, humInside, humOutside;
 
+unsigned int long prevMillis;
+
+void decode(String command);
 void setup()
 {
   Serial.begin(9600);
@@ -56,6 +57,7 @@ void setup()
     cnt++;
     Serial.print(".");
     delay(300);
+    yield();
     if (cnt >= 30)
       ESP.restart();
   }
@@ -84,8 +86,6 @@ void setup()
 
 void loop()
 {
-
-  unsigned int now = millis();
   if (WiFi.status() != WL_CONNECTED)
   {
     digitalWrite(wifiPin, LOW); // controls the status led on pcb
@@ -94,30 +94,104 @@ void loop()
   {
     digitalWrite(wifiPin, HIGH);
   }
+  if(Firebase.ready()){}
+  else {return;}
+  intervalMillis = millis();
+  String prevLockState = lockState;
+  String prevFanState = fanState;
+  String prevLightState = lightState;
+  String prevWaterPumpState = waterPumpState;
 
-  if (arduino.available())
+  // keep sending alive signal as long as device is online.
+  if (Firebase.RTDB.setString(&fbdo, "dashboard/alive", "1"))
   {
-    DynamicJsonDocument doc(96);
-    String message = arduino.readStringUntil('\n');
-    Serial.print(message);
-    DeserializationError error = deserializeJson(doc, message);
+    Serial.println("PASSED");
+    Serial.println("PATH: " + fbdo.dataPath());
+    Serial.println("TYPE: " + fbdo.dataType());
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + fbdo.errorReason());
+  }
 
-    if (error)
-    {
-      Serial.print("deserializeJson() failed: ");
-      Serial.println(error.f_str());
-      return;
-    }
-    gasSensorValue = doc["gasSensorValue"];
-    waterLevelSensorValue = doc["waterLevelSensorValue"];
-    waterPumpState = doc["waterPumpState"];
-    lightState = doc["lightState"];
-    fanState = doc["fanState"];
-    lockState = doc["lockState"];
-    tempInside = doc["temperatureInside"];
-    tempOutside = doc["temperatureOutside"];
-    humInside = doc["humidityInside"];
-    humOutside = doc["humidityOutside"];
+  if (Firebase.RTDB.getString(&fbdo, "dashboard/fans"))
+  {
+    fanState = fbdo.to<String>();
+
+    Serial.print(fanState);
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + fbdo.errorReason());
+  }
+
+  if (Firebase.RTDB.getString(&fbdo, "dashboard/lock"))
+  {
+    lockState = fbdo.to<String>();
+    Serial.print(lockState);
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + fbdo.errorReason());
+  }
+
+  if (Firebase.RTDB.getString(&fbdo, "dashboard/lights"))
+  {
+
+    lightState = fbdo.to<String>();
+    Serial.print(lightState);
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + fbdo.errorReason());
+  }
+
+  if (Firebase.RTDB.getString(&fbdo, "dashboard/waterpump"))
+  {
+    waterPumpState = fbdo.to<String>();
+
+    Serial.print(waterPumpState);
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + fbdo.errorReason());
+  }
+
+  if (prevFanState != fanState)
+  {
+    Serial.flush();
+    arduino.flush();
+    arduino.print("A");
+  }
+  if (prevLockState != lockState)
+  {
+    Serial.flush();
+    arduino.flush();
+    arduino.print("B");
+  }
+  if (prevLightState != lightState)
+  {
+    Serial.flush();
+    arduino.flush();
+    arduino.print("C");
+  }
+  if (prevWaterPumpState != waterPumpState)
+  {
+    Serial.flush();
+    arduino.flush();
+    arduino.print("D");
+  }
+
+  if (arduino.available() > 0)
+  {
+    String string = arduino.readString();
+    Serial.println(string);
+    decode(string);
 
     if (Firebase.RTDB.setString(&fbdo, "dashboard/gas", gasSensorValue))
     {
@@ -153,7 +227,7 @@ void loop()
     {
       Serial.println("FAILED");
       Serial.println("REASON: " + fbdo.errorReason());
-    } 
+    }
 
     if (Firebase.RTDB.setString(&fbdo, "dashboard/fans", fanState))
     {
@@ -250,95 +324,20 @@ void loop()
       Serial.println("REASON: " + fbdo.errorReason());
     }
   }
+}
+// get node from and print to screen.
+// will update database every 1 second.
 
-  // get node from and print to screen.
-  // will update database every 1 second. 
-  if (millis() - intervalMillis >= 1000)
-  {
-    bool prevLockState = lockState;
-    bool prevFanState = fanState;
-    bool prevLightState = lightState;
-    bool prevWaterPumpState = waterPumpState;
-
-
-// keep sending alive signal as long as device is online. 
-    if (Firebase.RTDB.setString(&fbdo, "dashboard/alive", "1"))
-    {
-      Serial.println("PASSED");
-      Serial.println("PATH: " + fbdo.dataPath());
-      Serial.println("TYPE: " + fbdo.dataType());
-    }
-    else
-    {
-      Serial.println("FAILED");
-      Serial.println("REASON: " + fbdo.errorReason());
-    }
-
-    if (Firebase.RTDB.getString(&fbdo, "dashboard/fans"))
-    {
-      String data = fbdo.to<String>();
-      fanState = data.toInt();
-      Serial.print(fanState);
-    }
-    else
-    {
-      Serial.println("FAILED");
-      Serial.println("REASON: " + fbdo.errorReason());
-    }
-
-    if (Firebase.RTDB.getString(&fbdo, "dashboard/lock"))
-    {
-      String data = fbdo.to<String>();
-      lockState = data.toInt();
-      Serial.print(lockState);
-    }
-    else
-    {
-      Serial.println("FAILED");
-      Serial.println("REASON: " + fbdo.errorReason());
-    }
-
-    if (Firebase.RTDB.getString(&fbdo, "dashboard/lights"))
-    {
-      String data = fbdo.to<String>();
-      lightState = data.toInt();
-      Serial.print(lightState);
-    }
-    else
-    {
-      Serial.println("FAILED");
-      Serial.println("REASON: " + fbdo.errorReason());
-    }
-
-    if (Firebase.RTDB.getString(&fbdo, "dashboard/waterpump"))
-    {
-      String data = fbdo.to<String>();
-      waterPumpState = data.toInt();
-      Serial.print(waterPumpState);
-    }
-    else
-    {
-      Serial.println("FAILED");
-      Serial.println("REASON: " + fbdo.errorReason());
-    }
-
-    if (prevFanState != fanState)
-    {
-      arduino.print("A");
-      delay(5);
-    }
-    if (prevLockState != lockState)
-    {
-      arduino.print("B");
-    }
-    if (prevLightState != lightState)
-    {
-      arduino.print("C");
-    }
-    if (prevWaterPumpState != waterPumpState)
-    {
-      arduino.write("D");
-    }
-    intervalMillis = millis();
-  }
+void decode(String command)
+{
+  gasSensorValue = command.substring(command.indexOf('@') + 1, command.indexOf(','));
+  waterLevelSensorValue = command.substring(command.indexOf(',') + 1, command.indexOf('!'));
+  waterPumpState = command.substring(command.indexOf("!") + 1, command.indexOf("#"));
+  lightState = command.substring(command.indexOf('#') + 1, command.indexOf('&'));
+  fanState = command.substring(command.indexOf('&') + 1, command.indexOf('$'));
+  lockState = command.substring(command.indexOf('$') + 1, command.indexOf('+'));
+  tempInside = command.substring(command.indexOf('+') + 1, command.indexOf('-'));
+  tempOutside = command.substring(command.indexOf('-') + 1, command.indexOf(')'));
+  humInside = command.substring(command.indexOf(')') + 1, command.indexOf('('));
+  humOutside = command.substring(command.indexOf('(') + 1, command.indexOf('*'));
 }
