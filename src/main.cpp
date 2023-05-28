@@ -5,6 +5,7 @@
 #include <ArduinoJson.h>
 SoftwareSerial arduino(5, 4); // d1,d2
 #define wifiPin 14            // d5
+#define SERIALREADY 12
 unsigned int prevTime;
 unsigned int intervalMillis;
 
@@ -203,6 +204,7 @@ void setup()
 {
   Serial.begin(9600);
   arduino.begin(9600);
+  pinMode(SERIALREADY, OUTPUT); 
   StaticJsonDocument<200> doc;
   Serial.println("hello world");
   pinMode(wifiPin, OUTPUT);
@@ -259,12 +261,26 @@ void loop()
     digitalWrite(wifiPin, HIGH);
   }
 
+  // while (arduino.available() < 0)
+  // {
+  //   Serial.println("Waiting for arduino to send something");
+  // }
+  if(arduino.available())
+  {
+    Serial.readString(); 
+  }
+  digitalWrite(SERIALREADY, HIGH);  //means ready 
+  delay(500);
   if (arduino.available())
   {
     message = arduino.readStringUntil('\n');
+    digitalWrite(SERIALREADY, LOW); 
+    Serial.println("received data. now uploading...");
+    Serial.println(message);
     StaticJsonDocument<500> doc;
     // Read the JSON document from the "link" serial port
     DeserializationError err = deserializeJson(doc, message);
+
     if (err == DeserializationError::Ok)
     {
       gasSensorValue = doc["gasSensorValue"].as<String>();
@@ -297,8 +313,11 @@ void loop()
       Serial.print(humInside);
       Serial.print(" , hum outside: ");
       Serial.println(humOutside);
-
-      if (Firebase.ready() && (millis() - prevMillis >= 3000))
+      while (!Firebase.ready())
+      {
+        Serial.println("Waiting for firebase");
+      }
+      if ((millis() - prevMillis >= 3000))
       {
         Serial.println("In firebase ready");
         if (Firebase.RTDB.setString(&fbdo, "/dashboard/gas", gasSensorValue))
@@ -396,10 +415,12 @@ void loop()
     waterPumpState = waterPumpStateF;
     if (waterPumpState == "true" || waterPumpState == "1")
     {
+      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#D");
     }
     else if (waterPumpState == "false" || waterPumpState == "0")
     {
+      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#E");
     }
   }
@@ -408,10 +429,12 @@ void loop()
     lightState = lightStateF;
     if (lightState == "true" || lightState == "1")
     {
+      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#C");
     }
     else if (lightState == "false" || lightState == "0")
     {
+      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#F");
     }
   }
@@ -421,10 +444,12 @@ void loop()
 
     if (fanState == "true" || fanState == "1")
     {
+      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#A");
     }
     else if (fanState == "false" || fanState == "0")
     {
+      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#H");
     }
   }
@@ -434,13 +459,25 @@ void loop()
 
     if (lockState == "true" || lockState == "1")
     {
+      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#B");
+      if (Firebase.RTDB.setString(&fbdo, "/dashboard/lock", "0"))
+      {
+        Serial.println("Updated hum outside. ");
+      }
+      else
+      {
+        Serial.println("FAILED");
+        Serial.println("REASON: " + fbdo.errorReason());
+      }
     }
     else if (lockState == "false" || lockState == "0")
     {
+      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#I");
     }
   }
+  arduino.flush();
 }
 
 // get node from and print to screen.
