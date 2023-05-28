@@ -37,6 +37,10 @@ String waterPumpState;
 String lightState;
 String fanState;
 String lockState;
+String waterPumpStateF;
+String lightStateF;
+String fanStateF;
+String lockStateF;
 String tempInside, tempOutside, humInside, humOutside;
 String prevLockState, prevLightState, prevFanState, prevWaterPumpState;
 
@@ -143,6 +147,58 @@ void updateAppliances()
   }
 }
 
+void getAppliancesState()
+{
+  if (Firebase.RTDB.getString(&fbdo, "/dashboard/lock"))
+  {
+    lockStateF = fbdo.to<String>();
+    // if that's not true then by default our value will be that of the arduino.
+    Serial.print("OK: lockState: ");
+    Serial.println(lockStateF);
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + fbdo.errorReason());
+  }
+
+  if (Firebase.RTDB.getString(&fbdo, "/dashboard/fans"))
+  {
+    fanStateF = fbdo.to<String>();
+    // if that's not true then by default our value will be that of the arduino.
+    Serial.print("OK: fanState: ");
+    Serial.println(fanStateF);
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + fbdo.errorReason());
+  }
+
+  if (Firebase.RTDB.getString(&fbdo, "/dashboard/lights"))
+  {
+    lightStateF = fbdo.to<String>();
+    Serial.print("OK: lightstate: ");
+    Serial.println(lightStateF);
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + fbdo.errorReason());
+  }
+
+  if (Firebase.RTDB.getString(&fbdo, "/dashboard/waterpump"))
+  {
+    waterPumpStateF = fbdo.to<String>();
+    Serial.print("OK: water pump state: ");
+    Serial.println(waterPumpStateF);
+  }
+  else
+  {
+    Serial.println("FAILED");
+    Serial.println("REASON: " + fbdo.errorReason());
+  }
+}
 void setup()
 {
   Serial.begin(9600);
@@ -186,6 +242,10 @@ void setup()
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
+  while (!Firebase.ready())
+  {
+  }
+  getAppliancesState(); // local copy of database set.
 }
 
 void loop()
@@ -202,20 +262,9 @@ void loop()
   if (arduino.available())
   {
     message = arduino.readStringUntil('\n');
-    // if (message[0] == '@')
-    // {
-    //   decode(message);
-    //   Serial.println(message);
-    // }
-    // else
-    // {
-    //   message = pastMessage;
-    // }
     StaticJsonDocument<500> doc;
-
     // Read the JSON document from the "link" serial port
     DeserializationError err = deserializeJson(doc, message);
-
     if (err == DeserializationError::Ok)
     {
       gasSensorValue = doc["gasSensorValue"].as<String>();
@@ -249,11 +298,8 @@ void loop()
       Serial.print(" , hum outside: ");
       Serial.println(humOutside);
 
-      if (Firebase.ready() && (millis() - prevMillis >= 1000))
+      if (Firebase.ready() && (millis() - prevMillis >= 3000))
       {
-        dataReceived = false;
-        // if (message != pastMessage)
-        // {
         Serial.println("In firebase ready");
         if (Firebase.RTDB.setString(&fbdo, "/dashboard/gas", gasSensorValue))
         {
@@ -324,12 +370,10 @@ void loop()
           Serial.println("FAILED");
           Serial.println("REASON: " + fbdo.errorReason());
         }
-        updateAppliances();
+        // updateAppliances();
         // arduino.println(encode());
         Serial.println("sent to arduino");
         // pastMessage = message;
-
-        dataReceived = true;
       }
       else
       {
@@ -341,42 +385,93 @@ void loop()
         while (arduino.available() > 0)
           arduino.read();
       }
-      
-    prevMillis = millis();
+
+      prevMillis = millis();
     }
     // only enter if message is new
   }
+  getAppliancesState();
+  if (waterPumpState != waterPumpStateF && waterPumpStateF != NULL)
+  {
+    waterPumpState = waterPumpStateF;
+    if (waterPumpState == "true" || waterPumpState == "1")
+    {
+      arduino.print("#D");
+    }
+    else if (waterPumpState == "false" || waterPumpState == "0")
+    {
+      arduino.print("#E");
+    }
+  }
+  else if (lightState != lightStateF && lightStateF != NULL)
+  {
+    lightState = lightStateF;
+    if (lightState == "true" || lightState == "1")
+    {
+      arduino.print("#C");
+    }
+    else if (lightState == "false" || lightState == "0")
+    {
+      arduino.print("#F");
+    }
+  }
+  else if (fanState != fanStateF && fanStateF != NULL)
+  {
+    fanState = fanStateF;
+
+    if (fanState == "true" || fanState == "1")
+    {
+      arduino.print("#A");
+    }
+    else if (fanState == "false" || fanState == "0")
+    {
+      arduino.print("#H");
+    }
+  }
+  else if (lockState != lockStateF && lockStateF != NULL)
+  {
+    lockState = lockStateF;
+
+    if (lockState == "true" || lockState == "1")
+    {
+      arduino.print("#B");
+    }
+    else if (lockState == "false" || lockState == "0")
+    {
+      arduino.print("#I");
+    }
+  }
 }
 
-  // get node from and print to screen.
-  // will update database every 1 second.
+// get node from and print to screen.
+// will update database every 1 second.
 
-  String encode()
-  {
-    String ptr;
-    ptr += '@';
-    ptr += String(fanState);
-    ptr += ',';
-    ptr += String(lightState);
-    ptr += '!';
-    ptr += String(waterPumpState);
-    ptr += '#';
-    ptr += String(lockState);
-    ptr += '&';
-    ptr += '\n';
-    return ptr;
-  }
+String encode()
+{
+  String ptr;
+  ptr += '@';
+  ptr += String(fanState);
+  ptr += ',';
+  ptr += String(lightState);
+  ptr += '!';
+  ptr += String(waterPumpState);
+  ptr += '#';
+  ptr += String(lockState);
+  ptr += '&';
+  ptr += '\n';
+  return ptr;
+}
 
-  void decode(String command)
-  {
-    gasSensorValue = command.substring(command.indexOf('@') + 1, command.indexOf(','));
-    waterLevelSensorValue = command.substring(command.indexOf(',') + 1, command.indexOf('!'));
-    waterPumpState = command.substring(command.indexOf("!") + 1, command.indexOf("#"));
-    lightState = command.substring(command.indexOf('#') + 1, command.indexOf('&'));
-    fanState = command.substring(command.indexOf('&') + 1, command.indexOf('$'));
-    lockState = command.substring(command.indexOf('$') + 1, command.indexOf('+'));
-    tempInside = command.substring(command.indexOf('+') + 1, command.indexOf('-'));
-    tempOutside = command.substring(command.indexOf('-') + 1, command.indexOf(')'));
-    humInside = command.substring(command.indexOf(')') + 1, command.indexOf('('));
-    humOutside = command.substring(command.indexOf('(') + 1, command.indexOf('*'));
-  }
+void decode(String command)
+{
+  gasSensorValue = command.substring(command.indexOf('@') + 1, command.indexOf(','));
+  waterLevelSensorValue = command.substring(command.indexOf(',') + 1, command.indexOf('!'));
+  waterPumpState = command.substring(command.indexOf("!") + 1, command.indexOf("#"));
+  lightState = command.substring(command.indexOf('#') + 1, command.indexOf('&'));
+  fanState = command.substring(command.indexOf('&') + 1, command.indexOf('$'));
+  lockState = command.substring(command.indexOf('$') + 1, command.indexOf('+'));
+  tempInside = command.substring(command.indexOf('+') + 1, command.indexOf('-'));
+  tempOutside = command.substring(command.indexOf('-') + 1, command.indexOf(')'));
+  humInside = command.substring(command.indexOf(')') + 1, command.indexOf('('));
+  humOutside = command.substring(command.indexOf('(') + 1, command.indexOf('*'));
+}
