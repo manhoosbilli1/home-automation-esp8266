@@ -204,7 +204,7 @@ void setup()
 {
   Serial.begin(9600);
   arduino.begin(9600);
-  pinMode(SERIALREADY, OUTPUT); 
+  pinMode(SERIALREADY, OUTPUT);
   StaticJsonDocument<200> doc;
   Serial.println("hello world");
   pinMode(wifiPin, OUTPUT);
@@ -265,202 +265,168 @@ void loop()
   // {
   //   Serial.println("Waiting for arduino to send something");
   // }
-  if(arduino.available())
+  if (arduino.available())
   {
-    Serial.readString(); 
+    Serial.readString();
   }
-  digitalWrite(SERIALREADY, HIGH);  //means ready 
+  digitalWrite(SERIALREADY, HIGH); // means ready
   delay(500);
   if (arduino.available())
   {
     message = arduino.readStringUntil('\n');
-    digitalWrite(SERIALREADY, LOW); 
+    digitalWrite(SERIALREADY, LOW);
     Serial.println("received data. now uploading...");
     Serial.println(message);
-    StaticJsonDocument<500> doc;
-    // Read the JSON document from the "link" serial port
-    DeserializationError err = deserializeJson(doc, message);
-
-    if (err == DeserializationError::Ok)
+    decode(message);
+    while (!Firebase.ready())
     {
-      gasSensorValue = doc["gasSensorValue"].as<String>();
-      waterLevelSensorValue = doc["waterLevelSensorValue"].as<String>();
-      waterPumpState = doc["waterPumpState"].as<String>();
-      lightState = doc["lightState"].as<String>();
-      fanState = doc["fanState"].as<String>();
-      lockState = doc["lockState"].as<String>();
-      tempInside = doc["temperatureInside"].as<String>();
-      tempOutside = doc["temperatureOutside"].as<String>();
-      humInside = doc["humidityInside"].as<String>();
-      humOutside = doc["humidityOutside"].as<String>();
-      Serial.print("gas: ");
-      Serial.print(gasSensorValue);
-      Serial.print(" , water sensor: ");
-      Serial.print(waterLevelSensorValue);
-      Serial.print(" , waterpumpstate: ");
-      Serial.print(waterPumpState);
-      Serial.print(" , light state: ");
-      Serial.print(lightState);
-      Serial.print(" , fan state: ");
-      Serial.print(fanState);
-      Serial.print(" , lockState: ");
-      Serial.print(lockState);
-      Serial.print(" , tempinside: ");
-      Serial.print(tempInside);
-      Serial.print(" , tempoutside: ");
-      Serial.print(tempOutside);
-      Serial.print(" , hum Inside: ");
-      Serial.print(humInside);
-      Serial.print(" , hum outside: ");
-      Serial.println(humOutside);
-      while (!Firebase.ready())
+      Serial.println("Waiting for firebase");
+    }
+    if (millis() - prevMillis >= 1000)
+    {
+      Serial.println("In firebase ready");
+      if (Firebase.RTDB.setString(&fbdo, "/dashboard/gas", gasSensorValue))
       {
-        Serial.println("Waiting for firebase");
-      }
-      if ((millis() - prevMillis >= 3000))
-      {
-        Serial.println("In firebase ready");
-        if (Firebase.RTDB.setString(&fbdo, "/dashboard/gas", gasSensorValue))
-        {
-          Serial.println("Updated gas. ");
-        }
-        else
-        {
-          Serial.println("FAILED");
-          Serial.println("REASON: " + fbdo.errorReason());
-        }
-
-        if (Firebase.RTDB.setString(&fbdo, "/dashboard/humidity_outside", humOutside))
-        {
-          Serial.println("Updated hum outside. ");
-        }
-        else
-        {
-          Serial.println("FAILED");
-          Serial.println("REASON: " + fbdo.errorReason());
-        }
-
-        if (Firebase.RTDB.setString(&fbdo, "/dashboard/humidity_inside", humInside))
-        {
-          Serial.println("Updated hum inside. ");
-        }
-        else
-        {
-          Serial.println("FAILED");
-          Serial.println("REASON: " + fbdo.errorReason());
-        }
-
-        if (Firebase.RTDB.setString(&fbdo, "/dashboard/temperature_inside", tempInside))
-        {
-          Serial.println("Updated temp inside. ");
-        }
-        else
-        {
-          Serial.println("FAILED");
-          Serial.println("REASON: " + fbdo.errorReason());
-        }
-
-        if (Firebase.RTDB.setString(&fbdo, "/dashboard/temperature_outside", tempOutside))
-        {
-          Serial.println("Updated temp outside. ");
-        }
-        else
-        {
-          Serial.println("FAILED");
-          Serial.println("REASON: " + fbdo.errorReason());
-        }
-
-        if (Firebase.RTDB.setString(&fbdo, "/dashboard/water", waterLevelSensorValue))
-        {
-          Serial.println("Updated water level. ");
-        }
-        else
-        {
-          Serial.println("FAILED");
-          Serial.println("REASON: " + fbdo.errorReason());
-        }
-
-        if (Firebase.RTDB.setString(&fbdo, "/dashboard/alive", "1"))
-        {
-          Serial.println("Updated gas. ");
-        }
-        else
-        {
-          Serial.println("FAILED");
-          Serial.println("REASON: " + fbdo.errorReason());
-        }
-        // updateAppliances();
-        // arduino.println(encode());
-        Serial.println("sent to arduino");
-        // pastMessage = message;
+        Serial.println("Updated gas. ");
       }
       else
       {
-        // Print error to the "debug" serial port
-        Serial.print("deserializeJson() returned ");
-        Serial.println(err.c_str());
-
-        // Flush all bytes in the "link" serial port buffer
-        while (arduino.available() > 0)
-          arduino.read();
+        Serial.println("FAILED");
+        Serial.println("REASON: " + fbdo.errorReason());
       }
 
-      prevMillis = millis();
+      if (Firebase.RTDB.setString(&fbdo, "/dashboard/humidity_outside", humOutside))
+      {
+        Serial.println("Updated hum outside. ");
+      }
+      else
+      {
+        Serial.println("FAILED");
+        Serial.println("REASON: " + fbdo.errorReason());
+      }
+
+      if (Firebase.RTDB.setString(&fbdo, "/dashboard/humidity_inside", humInside))
+      {
+        Serial.println("Updated hum inside. ");
+      }
+      else
+      {
+        Serial.println("FAILED");
+        Serial.println("REASON: " + fbdo.errorReason());
+      }
+
+      if (Firebase.RTDB.setString(&fbdo, "/dashboard/temperature_inside", tempInside))
+      {
+        Serial.println("Updated temp inside. ");
+      }
+      else
+      {
+        Serial.println("FAILED");
+        Serial.println("REASON: " + fbdo.errorReason());
+      }
+
+      if (Firebase.RTDB.setString(&fbdo, "/dashboard/temperature_outside", tempOutside))
+      {
+        Serial.println("Updated temp outside. ");
+      }
+      else
+      {
+        Serial.println("FAILED");
+        Serial.println("REASON: " + fbdo.errorReason());
+      }
+
+      if (Firebase.RTDB.setString(&fbdo, "/dashboard/water", waterLevelSensorValue))
+      {
+        Serial.println("Updated water level. ");
+      }
+      else
+      {
+        Serial.println("FAILED");
+        Serial.println("REASON: " + fbdo.errorReason());
+      }
+
+      if (Firebase.RTDB.setString(&fbdo, "/dashboard/alive", "1"))
+      {
+        Serial.println("Updated gas. ");
+      }
+      else
+      {
+        Serial.println("FAILED");
+        Serial.println("REASON: " + fbdo.errorReason());
+      }
+      // updateAppliances();
+      // arduino.println(encode());
+      Serial.println("sent to arduino");
+      // pastMessage = message;
     }
-    // only enter if message is new
+    else
+      // {
+      //   // Print error to the "debug" serial port
+      //   Serial.print("deserializeJson() returned ");
+      //   Serial.println(err.c_str());
+
+      // Flush all bytes in the "link" serial port buffer
+      if (arduino.available() > 0)
+      {
+        arduino.readString();
+        Serial.flush();
+        arduino.flush();
+      }
+    prevMillis = millis();
   }
+  // only enter if message is new
   getAppliancesState();
+  digitalWrite(SERIALREADY, LOW);
+  if (arduino.available())
+  {
+    Serial.readString(); // empty the buffer
+    arduino.flush();
+  }
   if (waterPumpState != waterPumpStateF && waterPumpStateF != NULL)
   {
     waterPumpState = waterPumpStateF;
     if (waterPumpState == "true" || waterPumpState == "1")
     {
-      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#D");
     }
     else if (waterPumpState == "false" || waterPumpState == "0")
     {
-      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#E");
     }
   }
-  else if (lightState != lightStateF && lightStateF != NULL)
+  if (lightState != lightStateF && lightStateF != NULL)
   {
     lightState = lightStateF;
     if (lightState == "true" || lightState == "1")
     {
-      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#C");
     }
     else if (lightState == "false" || lightState == "0")
     {
-      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#F");
     }
   }
-  else if (fanState != fanStateF && fanStateF != NULL)
+  if (fanState != fanStateF && fanStateF != NULL)
   {
     fanState = fanStateF;
 
     if (fanState == "true" || fanState == "1")
     {
-      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#A");
     }
     else if (fanState == "false" || fanState == "0")
     {
-      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#H");
     }
   }
-  else if (lockState != lockStateF && lockStateF != NULL)
+  if (lockState != lockStateF && lockStateF != NULL)
   {
     lockState = lockStateF;
 
     if (lockState == "true" || lockState == "1")
     {
-      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#B");
+      delay(500);
       if (Firebase.RTDB.setString(&fbdo, "/dashboard/lock", "0"))
       {
         Serial.println("Updated hum outside. ");
@@ -473,11 +439,11 @@ void loop()
     }
     else if (lockState == "false" || lockState == "0")
     {
-      digitalWrite(SERIALREADY, LOW); 
       arduino.print("#I");
     }
   }
   arduino.flush();
+  Serial.flush();
 }
 
 // get node from and print to screen.
@@ -503,11 +469,7 @@ void decode(String command)
 {
   gasSensorValue = command.substring(command.indexOf('@') + 1, command.indexOf(','));
   waterLevelSensorValue = command.substring(command.indexOf(',') + 1, command.indexOf('!'));
-  waterPumpState = command.substring(command.indexOf("!") + 1, command.indexOf("#"));
-  lightState = command.substring(command.indexOf('#') + 1, command.indexOf('&'));
-  fanState = command.substring(command.indexOf('&') + 1, command.indexOf('$'));
-  lockState = command.substring(command.indexOf('$') + 1, command.indexOf('+'));
-  tempInside = command.substring(command.indexOf('+') + 1, command.indexOf('-'));
+  tempInside = command.substring(command.indexOf('!') + 1, command.indexOf('-'));
   tempOutside = command.substring(command.indexOf('-') + 1, command.indexOf(')'));
   humInside = command.substring(command.indexOf(')') + 1, command.indexOf('('));
   humOutside = command.substring(command.indexOf('(') + 1, command.indexOf('*'));
